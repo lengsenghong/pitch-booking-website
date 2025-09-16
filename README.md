@@ -7,21 +7,15 @@ A modern, full-stack football pitch booking platform built with Next.js, Prisma,
 ## 🚀 Features
 
 ### 🎯 Core Features
-- **Multi-role Authentication**: Players, Pitch Owners, and Admins with role-based access
+- **Multi-role Authentication**: Players, Pitch Owners, and Admins with role-based access (accesss role in prisma studio)
 - **Advanced Pitch Search**: Filter by location, type, price, size, and amenities
 - **Real-time Booking System**: Interactive calendar with availability checking
-- **Payment Integration**: Ready for Stripe and PayPal integration
+- **Payment Integration**: cash in arrival or qr code 
 - **User Dashboards**: Separate interfaces for players, owners, and admins
 - **Review System**: Rate and review pitches after bookings
 - **Team Management**: Create and manage football teams
 
-### 🔥 Advanced Features
-- **Dynamic Pricing**: Support for peak and off-peak hour rates
-- **Notifications System**: Email and in-app notifications
-- **Analytics Dashboard**: Revenue and booking analytics for owners
-- **Admin Panel**: Complete platform management and oversight
-- **Mobile Responsive**: Optimized for all devices and screen sizes
-- **Modern UI/UX**: Clean design with smooth animations and micro-interactions
+
 
 ## 🛠️ Tech Stack
 
@@ -99,19 +93,12 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 The seed script creates test accounts for all user roles:
 
 ### Admin Access
-- **Email**: `admin@fieldplay.com`
-- **Password**: `admin123`
-- **Access**: Complete platform management
-
+- **Register as owner or user then go to prisma and assign role admin**
 ### Pitch Owner Accounts
-- **Email**: `owner1@fieldplay.com` or `owner2@fieldplay.com`
-- **Password**: `owner123`
-- **Access**: Pitch management and booking oversight
+- **
 
 ### Player Accounts
-- **Email**: `player1@fieldplay.com` or `player2@fieldplay.com`
-- **Password**: `player123`
-- **Access**: Browse and book pitches
+- **register as user**
 
 ## 📱 How to Use the Platform
 
@@ -122,7 +109,7 @@ The seed script creates test accounts for all user roles:
 3. **View Details**: Check pitch amenities, pricing, and availability
 4. **Book a Pitch**: Select date/time and complete booking
 5. **Manage Bookings**: View upcoming and past bookings in your dashboard
-6. **Rate & Review**: Leave feedback after your game
+6. **Rate & Review**: Leave feedback after your game (not yet)
 
 ### For Pitch Owners:
 
@@ -150,8 +137,8 @@ The application uses a comprehensive PostgreSQL schema:
 - **Pitches**: Facility details with images and amenities
 - **Bookings**: Reservation system with status tracking
 - **Payments**: Transaction records (ready for payment integration)
-- **Reviews**: User feedback and ratings
-- **Teams**: Group management for players
+- **Reviews**: User feedback and ratings (up comming)
+- **Teams**: Group management for players (up comming)
 
 ### Key Relationships:
 - Users can have multiple bookings and own multiple pitches
