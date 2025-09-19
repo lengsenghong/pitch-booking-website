@@ -11,6 +11,8 @@ import {
   Phone,
   ArrowLeft,
   Check,
+  LogIn,
+  UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +41,11 @@ export default function BookingPage({ params }: { params: { id: string } }) {
   const searchParams = useSearchParams();
   const [bookingStep, setBookingStep] = useState(1);
   const [user, setUser] = useState<any>(null);
+  const [pitch, setPitch] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string>("");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -48,29 +55,26 @@ export default function BookingPage({ params }: { params: { id: string } }) {
     paymentMethod: "card",
   });
 
-  const pitch = {
-    id: parseInt(params.id),
-    name: "Elite Sports Center",
-    location: "Downtown District",
-    address: "123 Main St, Downtown District",
-    price: 75,
-    type: "Indoor",
-    size: "11v11",
-  };
-
   const bookingDate = searchParams.get("date")
     ? new Date(searchParams.get("date")!)
     : new Date();
   const bookingTime = searchParams.get("time") || "2:00 PM";
 
   useEffect(() => {
-    // Check authentication
+    // Check authentication first
     const currentUser = JSON.parse(localStorage.getItem("currentUser") || "{}");
+
     if (!currentUser.id) {
-      window.location.href = "/auth/login";
+      // User is not authenticated - show login prompt
+      setIsAuthenticated(false);
+      setLoading(false);
       return;
     }
+
+    // User is authenticated
+    setIsAuthenticated(true);
     setUser(currentUser);
+
     // Pre-fill form with user data
     setFormData((prev) => ({
       ...prev,
@@ -78,54 +82,198 @@ export default function BookingPage({ params }: { params: { id: string } }) {
       email: currentUser.email,
       phone: currentUser.phone || "",
     }));
-  }, []);
+
+    fetchPitchDetails();
+  }, [params.id]);
+
+  const fetchPitchDetails = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/pitches/${params.id}`);
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch pitch details");
+      }
+
+      const pitchData = await response.json();
+      setPitch(pitchData);
+    } catch (error) {
+      console.error("Error fetching pitch:", error);
+      setError("Failed to load pitch details");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleBookingSubmit = () => {
-    // Create booking and store in localStorage for demo
-    const currentUser = JSON.parse(localStorage.getItem("currentUser") || "{}");
-    if (currentUser.id) {
-      const newBooking = {
-        id: Date.now().toString(),
-        userId: currentUser.id,
+  const handleBookingSubmit = async () => {
+    try {
+      setSubmitting(true);
+      const currentUser = JSON.parse(
+        localStorage.getItem("currentUser") || "{}"
+      );
+
+      if (!currentUser.id) {
+        throw new Error("User not authenticated");
+      }
+
+      const bookingData = {
         pitchId: params.id,
         bookingDate: bookingDate.toISOString(),
         startTime: bookingTime,
-        endTime: bookingTime, // You might want to calculate end time
         duration: 60,
-        totalAmount: pitch.price,
-        status: "CONFIRMED",
+        totalAmount: pitch.pricePerHour,
         teamName: formData.teamName,
         notes: formData.notes,
-        pitch: {
-          id: params.id,
-          name: pitch.name,
-          city: pitch.location,
-          images: [
-            {
-              url: "https://images.pexels.com/photos/274506/pexels-photo-274506.jpeg",
-            },
-          ],
-        },
-        createdAt: new Date().toISOString(),
+        paymentMethod: formData.paymentMethod,
+        userId: currentUser.id,
       };
 
-      // Store booking in localStorage
+      console.log("Sending booking data:", bookingData);
+
+      const response = await fetch("/api/bookings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(bookingData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to create booking");
+      }
+
+      const newBooking = await response.json();
+      console.log("Booking created successfully:", newBooking);
+
+      // Store in localStorage for immediate access
       const existingBookings = JSON.parse(
         localStorage.getItem(`bookings_${currentUser.id}`) || "[]"
       );
-      existingBookings.push(newBooking);
+      existingBookings.push({
+        ...newBooking,
+        pitch: {
+          id: params.id,
+          name: pitch.name,
+          city: pitch.city,
+          images: pitch.images || [],
+        },
+      });
       localStorage.setItem(
         `bookings_${currentUser.id}`,
         JSON.stringify(existingBookings)
       );
-    }
 
-    setBookingStep(3);
+      setBookingStep(3);
+    } catch (error) {
+      console.error("Error creating booking:", error);
+      setError(
+        error instanceof Error ? error.message : "Failed to create booking"
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  // Authentication required screen
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <Card className="text-center border-0 shadow-xl">
+            <CardContent className="pt-12 pb-8">
+              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <LogIn className="h-8 w-8 text-emerald-600" />
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900 mb-4">
+                Login Required
+              </h1>
+              <p className="text-gray-600 mb-8">
+                You need to be logged in to book a pitch. Please sign in to your
+                account or create a new one to continue.
+              </p>
+
+              <div className="flex gap-4 justify-center mb-6">
+                <Link href="/auth/login">
+                  <Button className="bg-emerald-600 hover:bg-emerald-700">
+                    <LogIn className="h-4 w-4 mr-2" />
+                    Login
+                  </Button>
+                </Link>
+                <Link href="/auth/register">
+                  <Button variant="outline">
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Sign Up
+                  </Button>
+                </Link>
+              </div>
+
+              <div className="text-sm text-gray-500">
+                <p>New to our platform? Create an account to:</p>
+                <ul className="mt-2 space-y-1">
+                  <li>• Book and manage your pitch reservations</li>
+                  <li>• Track your booking history</li>
+                  <li>• Receive booking confirmations and updates</li>
+                  <li>• Save your favorite venues</li>
+                </ul>
+              </div>
+
+              <div className="mt-8 pt-6 border-t border-gray-200">
+                <Link href={`/pitches/${params.id}`}>
+                  <Button
+                    variant="ghost"
+                    className="text-emerald-600 hover:text-emerald-700"
+                  >
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Back to Pitch Details
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !pitch) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center py-12">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              {error}
+            </h2>
+            <Link href="/pitches">
+              <Button className="bg-emerald-600 hover:bg-emerald-700">
+                Back to Pitches
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (bookingStep === 3) {
     return (
@@ -150,7 +298,7 @@ export default function BookingPage({ params }: { params: { id: string } }) {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Pitch:</span>
-                    <span className="font-medium">{pitch.name}</span>
+                    <span className="font-medium">{pitch?.name}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Date:</span>
@@ -164,7 +312,7 @@ export default function BookingPage({ params }: { params: { id: string } }) {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Total:</span>
-                    <span className="font-medium">${pitch.price}</span>
+                    <span className="font-medium">${pitch?.pricePerHour}</span>
                   </div>
                 </div>
               </div>
@@ -207,6 +355,12 @@ export default function BookingPage({ params }: { params: { id: string } }) {
           </h1>
           <p className="text-gray-600">Secure your pitch reservation</p>
         </div>
+
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-600">{error}</p>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Booking Form */}
@@ -371,7 +525,7 @@ export default function BookingPage({ params }: { params: { id: string } }) {
 
                       <div className="mt-4 p-3 bg-white rounded-lg border border-blue-200">
                         <p className="text-sm font-medium text-gray-900">
-                          Amount: ${pitch.price}
+                          Amount: ${pitch?.pricePerHour}
                         </p>
                         <p className="text-xs text-gray-600 mt-1">
                           Reference: BK-{Date.now().toString().slice(-6)}
@@ -386,6 +540,7 @@ export default function BookingPage({ params }: { params: { id: string } }) {
                     </div>
                   </div>
                 )}
+
                 <div className="flex items-center space-x-2">
                   <Checkbox id="terms" />
                   <Label htmlFor="terms" className="text-sm">
@@ -397,11 +552,16 @@ export default function BookingPage({ params }: { params: { id: string } }) {
                   onClick={handleBookingSubmit}
                   className="w-full bg-emerald-600 hover:bg-emerald-700 py-3"
                   disabled={
-                    !formData.name || !formData.email || !formData.phone
+                    !formData.name ||
+                    !formData.email ||
+                    !formData.phone ||
+                    submitting
                   }
                 >
                   <CreditCard className="h-4 w-4 mr-2" />
-                  Complete Booking - ${pitch.price}
+                  {submitting
+                    ? "Creating Booking..."
+                    : `Complete Booking - $${pitch?.pricePerHour}`}
                 </Button>
               </CardContent>
             </Card>
@@ -416,17 +576,20 @@ export default function BookingPage({ params }: { params: { id: string } }) {
               <CardContent className="space-y-4">
                 <div className="aspect-video relative rounded-lg overflow-hidden">
                   <img
-                    src="https://images.pexels.com/photos/274506/pexels-photo-274506.jpeg"
-                    alt={pitch.name}
+                    src={
+                      pitch?.images?.[0]?.url ||
+                      "https://images.pexels.com/photos/274506/pexels-photo-274506.jpeg"
+                    }
+                    alt={pitch?.name}
                     className="w-full h-full object-cover"
                   />
                 </div>
 
                 <div>
-                  <h3 className="font-semibold text-lg">{pitch.name}</h3>
+                  <h3 className="font-semibold text-lg">{pitch?.name}</h3>
                   <p className="text-gray-600 flex items-center text-sm">
                     <MapPin className="h-4 w-4 mr-1" />
-                    {pitch.address}
+                    {pitch?.address}, {pitch?.city}, {pitch?.state}
                   </p>
                 </div>
 
@@ -448,7 +611,7 @@ export default function BookingPage({ params }: { params: { id: string } }) {
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Pitch Type:</span>
                     <span className="font-medium">
-                      {pitch.type} • {pitch.size}
+                      {pitch?.type} • {pitch?.size}
                     </span>
                   </div>
                 </div>
@@ -457,7 +620,7 @@ export default function BookingPage({ params }: { params: { id: string } }) {
                   <div className="flex justify-between items-center">
                     <span className="text-lg font-semibold">Total:</span>
                     <span className="text-2xl font-bold text-emerald-600">
-                      ${pitch.price}
+                      ${pitch?.pricePerHour}
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">

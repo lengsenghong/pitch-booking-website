@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+// import { signToken } from "@/lib/session";
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);

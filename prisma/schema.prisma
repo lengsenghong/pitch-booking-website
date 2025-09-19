@@ -1,14 +1,229 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  password      String
+  firstName     String
+  lastName      String
+  phone         String?
+  avatar        String?
+  role          UserRole       @default(USER)
+  verified      Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  bookings      Booking[]
+  earnings      Earning[]
+  notifications Notification[]
+  pitches       Pitch[]
+  reviews       Review[]
+  teamMembers   TeamMember[]
+
+  @@map("users")
+}
+
+model Pitch {
+  id                 String              @id @default(cuid())
+  name               String
+  description        String?
+  address            String
+  city               String
+  state              String
+  zipCode            String?
+  latitude           Float?
+  longitude          Float?
+  type               PitchType
+  surface            SurfaceType
+  size               String
+  dimensions         String?
+  capacity           Int
+  pricePerHour       Decimal
+  hasFloodlights     Boolean             @default(false)
+  hasParking         Boolean             @default(false)
+  hasChangingRooms   Boolean             @default(false)
+  hasShowers         Boolean             @default(false)
+  hasRefreshments    Boolean             @default(false)
+  hasEquipmentRental Boolean             @default(false)
+  hasWifi            Boolean             @default(false)
+  isActive           Boolean             @default(true)
+  isVerified         Boolean             @default(false)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  ownerId            String
+  bookings           Booking[]
+  amenities          PitchAmenity[]
+  availability       PitchAvailability[]
+  images             PitchImage[]
+  owner              User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  reviews            Review[]
+
+  @@map("pitches")
+}
+
+model PitchImage {
+  id        String   @id @default(cuid())
+  url       String
+  alt       String?
+  order     Int      @default(0)
+  pitchId   String
+  createdAt DateTime @default(now())
+  pitch     Pitch    @relation(fields: [pitchId], references: [id], onDelete: Cascade)
+
+  @@map("pitch_images")
+}
+
+model PitchAmenity {
+  id      String  @id @default(cuid())
+  name    String
+  icon    String?
+  pitchId String
+  pitch   Pitch   @relation(fields: [pitchId], references: [id], onDelete: Cascade)
+
+  @@map("pitch_amenities")
+}
+
+model PitchAvailability {
+  id        String   @id @default(cuid())
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  isActive  Boolean  @default(true)
+  pitchId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  pitch     Pitch    @relation(fields: [pitchId], references: [id], onDelete: Cascade)
+
+  @@map("pitch_availability")
+}
+
+model Booking {
+  id           String        @id @default(cuid())
+  bookingDate  DateTime
+  startTime    String
+  endTime      String
+  duration     Int
+  totalAmount  Decimal
+  status       BookingStatus @default(PENDING)
+  notes        String?
+  teamName     String?
+  cancelledAt  DateTime?
+  cancelReason String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  userId       String
+  pitchId      String
+  pitch        Pitch         @relation(fields: [pitchId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
+  payment      Payment?
+  review       Review?
+
+  @@map("bookings")
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  amount          Decimal
+  currency        String        @default("USD")
+  method          PaymentMethod
+  status          PaymentStatus @default(PENDING)
+  stripePaymentId String?
+  paypalPaymentId String?
+  paidAt          DateTime?
+  refundedAt      DateTime?
+  refundAmount    Decimal?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  bookingId       String        @unique
+  booking         Booking       @relation(fields: [bookingId], references: [id])
+
+  @@map("payments")
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String
+  pitchId   String
+  bookingId String   @unique
+  booking   Booking  @relation(fields: [bookingId], references: [id])
+  pitch     Pitch    @relation(fields: [pitchId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("reviews")
+}
+
+model Team {
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  avatar      String?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  members     TeamMember[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  id       String   @id @default(cuid())
+  role     String   @default("MEMBER")
+  joinedAt DateTime @default(now())
+  userId   String
+  teamId   String
+  team     Team     @relation(fields: [teamId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, teamId])
+  @@map("team_members")
+}
+
+model Earning {
+  id         String   @id @default(cuid())
+  amount     Decimal
+  commission Decimal
+  netAmount  Decimal
+  period     String
+  createdAt  DateTime @default(now())
+  ownerId    String
+  owner      User     @relation(fields: [ownerId], references: [id])
+
+  @@map("earnings")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  type      String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+model AdminSettings {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("admin_settings")
 }
 
 enum UserRole {
@@ -23,6 +238,7 @@ enum BookingStatus {
   COMPLETED
   CANCELLED
   REJECTED
+  CANCELLATION_REQUESTED
 }
 
 enum PaymentStatus {
@@ -48,276 +264,4 @@ enum SurfaceType {
   ARTIFICIAL_GRASS
   SYNTHETIC_TURF
   CONCRETE
-}
-
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String   // Required password field
-  firstName String
-  lastName  String
-  phone     String?
-  avatar    String?
-  role      UserRole @default(USER)
-  verified  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Player relationships
-  bookings     Booking[]
-  reviews      Review[]
-  teamMembers  TeamMember[]
-  notifications Notification[]
-
-  // Owner relationships
-  pitches      Pitch[]
-  earnings     Earning[]
-
-  @@map("users")
-}
-
-model Pitch {
-  id          String      @id @default(cuid())
-  name        String
-  description String?
-  address     String
-  city        String
-  state       String
-  zipCode     String
-  latitude    Float?
-  longitude   Float?
-  
-  // Pitch details
-  type        PitchType
-  surface     SurfaceType
-  size        String      // e.g., "11v11", "7v7", "5v5"
-  dimensions  String?     // e.g., "100m x 60m"
-  capacity    Int
-  
-  // Pricing
-  pricePerHour Decimal
-  
-  // Features
-  hasFloodlights Boolean @default(false)
-  hasParking     Boolean @default(false)
-  hasChangingRooms Boolean @default(false)
-  hasShowers     Boolean @default(false)
-  hasRefreshments Boolean @default(false)
-  hasEquipmentRental Boolean @default(false)
-  hasWifi        Boolean @default(false)
-  
-  // Status
-  isActive    Boolean @default(true)
-  isVerified  Boolean @default(false)
-  
-  // Metadata
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // Relationships
-  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  ownerId     String
-  
-  images      PitchImage[]
-  bookings    Booking[]
-  reviews     Review[]
-  availability PitchAvailability[]
-  amenities   PitchAmenity[]
-
-  @@map("pitches")
-}
-
-model PitchImage {
-  id      String @id @default(cuid())
-  url     String
-  alt     String?
-  order   Int    @default(0)
-  
-  pitch   Pitch  @relation(fields: [pitchId], references: [id], onDelete: Cascade)
-  pitchId String
-  
-  createdAt DateTime @default(now())
-
-  @@map("pitch_images")
-}
-
-model PitchAmenity {
-  id      String @id @default(cuid())
-  name    String
-  icon    String?
-  
-  pitch   Pitch  @relation(fields: [pitchId], references: [id], onDelete: Cascade)
-  pitchId String
-  
-  @@map("pitch_amenities")
-}
-
-model PitchAvailability {
-  id        String   @id @default(cuid())
-  dayOfWeek Int      // 0 = Sunday, 1 = Monday, etc.
-  startTime String   // e.g., "09:00"
-  endTime   String   // e.g., "22:00"
-  isActive  Boolean  @default(true)
-  
-  pitch     Pitch    @relation(fields: [pitchId], references: [id], onDelete: Cascade)
-  pitchId   String
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("pitch_availability")
-}
-
-model Booking {
-  id          String        @id @default(cuid())
-  bookingDate DateTime
-  startTime   String        // e.g., "14:00"
-  endTime     String        // e.g., "15:00"
-  duration    Int           // in minutes
-  totalAmount Decimal
-  status      BookingStatus @default(PENDING)
-  notes       String?
-  teamName    String?
-  
-  // Cancellation
-  cancelledAt DateTime?
-  cancelReason String?
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // Relationships
-  user        User     @relation(fields: [userId], references: [id])
-  userId      String
-  
-  pitch       Pitch    @relation(fields: [pitchId], references: [id])
-  pitchId     String
-  
-  payment     Payment?
-  review      Review?
-
-  @@map("bookings")
-}
-
-model Payment {
-  id              String        @id @default(cuid())
-  amount          Decimal
-  currency        String        @default("USD")
-  method          PaymentMethod
-  status          PaymentStatus @default(PENDING)
-  
-  // Payment gateway details
-  stripePaymentId String?
-  paypalPaymentId String?
-  
-  // Metadata
-  paidAt          DateTime?
-  refundedAt      DateTime?
-  refundAmount    Decimal?
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  // Relationships
-  booking         Booking  @relation(fields: [bookingId], references: [id])
-  bookingId       String   @unique
-
-  @@map("payments")
-}
-
-model Review {
-  id        String   @id @default(cuid())
-  rating    Int      // 1-5 stars
-  comment   String?
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  // Relationships
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  
-  pitch     Pitch    @relation(fields: [pitchId], references: [id])
-  pitchId   String
-  
-  booking   Booking  @relation(fields: [bookingId], references: [id])
-  bookingId String   @unique
-
-  @@map("reviews")
-}
-
-model Team {
-  id          String @id @default(cuid())
-  name        String
-  description String?
-  avatar      String?
-  isActive    Boolean @default(true)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // Relationships
-  members     TeamMember[]
-
-  @@map("teams")
-}
-
-model TeamMember {
-  id       String @id @default(cuid())
-  role     String @default("MEMBER") // CAPTAIN, MEMBER
-  joinedAt DateTime @default(now())
-  
-  // Relationships
-  user     User   @relation(fields: [userId], references: [id])
-  userId   String
-  
-  team     Team   @relation(fields: [teamId], references: [id])
-  teamId   String
-  
-  @@unique([userId, teamId])
-  @@map("team_members")
-}
-
-model Earning {
-  id          String   @id @default(cuid())
-  amount      Decimal
-  commission  Decimal  // Platform commission
-  netAmount   Decimal  // Amount after commission
-  period      String   // e.g., "2025-01"
-  
-  createdAt   DateTime @default(now())
-  
-  // Relationships
-  owner       User     @relation(fields: [ownerId], references: [id])
-  ownerId     String
-
-  @@map("earnings")
-}
-
-model Notification {
-  id        String   @id @default(cuid())
-  title     String
-  message   String
-  type      String   // BOOKING, PAYMENT, REVIEW, etc.
-  isRead    Boolean  @default(false)
-  
-  createdAt DateTime @default(now())
-  
-  // Relationships
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-
-  @@map("notifications")
-}
-
-model AdminSettings {
-  id                String  @id @default(cuid())
-  key               String  @unique
-  value             String
-  description       String?
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  @@map("admin_settings")
 }

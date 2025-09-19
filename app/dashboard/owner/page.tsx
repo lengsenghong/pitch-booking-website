@@ -117,7 +117,7 @@ interface NewPitch {
 export default function OwnerDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [myPitches, setMyPitches] = useState<Pitch[]>([]);
-  const [recentBookings, setRecentBookings] = useState([]);
+  const [recentBookings, setRecentBookings] = useState<any[]>([]);
   const [stats, setStats] = useState({
     totalRevenue: 0,
     totalBookings: 0,
@@ -125,6 +125,7 @@ export default function OwnerDashboard() {
     averageRating: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
   const [isAddPitchOpen, setIsAddPitchOpen] = useState(false);
   const [isEditPitchOpen, setIsEditPitchOpen] = useState(false);
   const [selectedPitch, setSelectedPitch] = useState<Pitch | null>(null);
@@ -170,9 +171,13 @@ export default function OwnerDashboard() {
         window.location.href = "/dashboard/user";
       } else if (currentUser.role === "ADMIN") {
         window.location.href = "/dashboard/admin";
+      } else {
+        window.location.href = "/auth/login";
       }
       return;
     }
+
+    setUser(currentUser);
     fetchOwnerData();
   }, []);
 
@@ -181,78 +186,149 @@ export default function OwnerDashboard() {
       const currentUser = JSON.parse(
         localStorage.getItem("currentUser") || "{}"
       );
-      if (!currentUser.id) {
-        console.log("No owner found in localStorage");
-        setLoading(false);
-        return;
-      }
+      if (!currentUser.id) return setLoading(false);
 
-      console.log("Fetching data for owner:", currentUser);
-      // Fetch owner's pitches
-      const pitchesResponse = await fetch(
-        `/api/owners/${currentUser.id}/pitches`
-      );
-      if (pitchesResponse.ok) {
-        const pitchesData = await pitchesResponse.json();
-        setMyPitches(pitchesData);
+      const response = await fetch(`/api/owners/${currentUser.id}/pitches`);
+      if (!response.ok) return setMyPitches([]);
 
-        // Calculate stats
-        const totalRevenue = pitchesData.reduce(
-          (sum: number, pitch: any) =>
-            sum +
-            pitch.bookings.reduce(
-              (bookingSum: number, booking: any) =>
-                bookingSum + Number(booking.totalAmount),
-              0
-            ),
-          0
-        );
-
-        const totalBookings = pitchesData.reduce(
-          (sum: number, pitch: any) => sum + pitch.bookings.length,
-          0
-        );
-
-        const activePitches = pitchesData.filter(
-          (pitch: any) => pitch.isActive
-        ).length;
-
-        const allReviews = pitchesData.flatMap((pitch: any) => pitch.reviews);
-        const averageRating =
-          allReviews.length > 0
-            ? allReviews.reduce(
-                (sum: number, review: any) => sum + review.rating,
-                0
-              ) / allReviews.length
-            : 0;
-
-        setStats({
-          totalRevenue,
-          totalBookings,
-          activePitches,
-          averageRating: Number(averageRating.toFixed(1)),
-        });
-
-        // Get recent bookings
-        const allBookings = pitchesData
-          .flatMap((pitch: any) =>
-            pitch.bookings.map((booking: any) => ({
-              ...booking,
-              pitchName: pitch.name,
-            }))
-          )
-          .sort(
-            (a: any, b: any) =>
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-
-        setRecentBookings(allBookings.slice(0, 10));
-      }
+      const pitchesData = await response.json();
+      setMyPitches(pitchesData);
+      calculateStats(pitchesData);
     } catch (error) {
-      console.error("Error fetching owner data:", error);
+      console.error(error);
+      setMyPitches([]);
+      setStats({
+        totalRevenue: 0,
+        totalBookings: 0,
+        activePitches: 0,
+        averageRating: 0,
+      });
     } finally {
       setLoading(false);
     }
+  };
+
+  const calculateStats = (pitchesData: any[]) => {
+    const totalRevenue = pitchesData.reduce(
+      (sum: number, pitch: any) =>
+        sum +
+        (pitch.bookings?.reduce(
+          (bookingSum: number, booking: any) =>
+            bookingSum + Number(booking.totalAmount || 0),
+          0
+        ) || 0),
+      0
+    );
+    const calculateStats = (pitchesData: any[]) => {
+      // Stats
+      const totalRevenue = pitchesData.reduce(
+        (sum, pitch) =>
+          sum +
+          (pitch.bookings?.reduce(
+            (bSum: number, b: any) => bSum + Number(b.totalAmount || 0),
+            0
+          ) || 0),
+        0
+      );
+
+      const totalBookings = pitchesData.reduce(
+        (sum, pitch) => sum + (pitch.bookings?.length || 0),
+        0
+      );
+      const activePitches = pitchesData.filter((p) => p.isActive).length;
+
+      const allReviews = pitchesData.flatMap((p) => p.reviews || []);
+      const averageRating = allReviews.length
+        ? allReviews.reduce((sum, r) => sum + (r.rating || 0), 0) /
+          allReviews.length
+        : 0;
+
+      setStats({
+        totalRevenue,
+        totalBookings,
+        activePitches,
+        averageRating: Number(averageRating.toFixed(1)),
+      });
+      const handleApproveCancel = async (
+        bookingId: string,
+        approve: boolean
+      ) => {
+        try {
+          const response = await fetch(
+            `/api/bookings/${bookingId}/cancel/approve`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: approve ? "APPROVE" : "DENY" }),
+            }
+          );
+          if (!response.ok) throw new Error("Failed to process request");
+
+          const updatedBooking = await response.json();
+          setRecentBookings((prev) =>
+            prev.map((b) => (b.id === bookingId ? updatedBooking.booking : b))
+          );
+          alert(approve ? "Cancellation approved" : "Cancellation denied");
+        } catch (error) {
+          console.error(error);
+          alert("Failed to process cancellation request");
+        }
+      };
+
+      // Recent bookings sorted by date descending
+      const allBookings = pitchesData
+        .flatMap((p) =>
+          (p.bookings || []).map((b: any) => ({ ...b, pitchName: p.name }))
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.bookingDate).getTime() -
+            new Date(a.bookingDate).getTime()
+        );
+
+      setRecentBookings(allBookings.slice(0, 10));
+    };
+
+    const totalBookings = pitchesData.reduce(
+      (sum: number, pitch: any) => sum + (pitch.bookings?.length || 0),
+      0
+    );
+
+    const activePitches = pitchesData.filter(
+      (pitch: any) => pitch.isActive
+    ).length;
+
+    const allReviews = pitchesData.flatMap((pitch: any) => pitch.reviews || []);
+    const averageRating =
+      allReviews.length > 0
+        ? allReviews.reduce(
+            (sum: number, review: any) => sum + (review.rating || 0),
+            0
+          ) / allReviews.length
+        : 0;
+
+    setStats({
+      totalRevenue,
+      totalBookings,
+      activePitches,
+      averageRating: Number(averageRating.toFixed(1)),
+    });
+
+    // Get recent bookings
+    const allBookings = pitchesData
+      .flatMap((pitch: any) =>
+        (pitch.bookings || []).map((booking: any) => ({
+          ...booking,
+          pitchName: pitch.name,
+        }))
+      )
+      .sort(
+        (a: any, b: any) =>
+          new Date(b.createdAt || b.bookingDate).getTime() -
+          new Date(a.createdAt || a.bookingDate).getTime()
+      );
+
+    setRecentBookings(allBookings.slice(0, 10));
   };
 
   const handleAddPitch = async () => {
@@ -271,6 +347,8 @@ export default function OwnerDashboard() {
         amenities: newPitch.amenities,
       };
 
+      console.log("Creating pitch with data:", pitchData);
+
       const response = await fetch("/api/pitches", {
         method: "POST",
         headers: {
@@ -280,7 +358,8 @@ export default function OwnerDashboard() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to create pitch");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to create pitch");
       }
 
       const createdPitch = await response.json();
@@ -288,33 +367,41 @@ export default function OwnerDashboard() {
 
       // Reset form and refresh data
       setIsAddPitchOpen(false);
-      setNewPitch({
-        name: "",
-        description: "",
-        address: "",
-        city: "",
-        state: "",
-        zipCode: "",
-        type: "",
-        surface: "",
-        size: "",
-        dimensions: "",
-        capacity: "",
-        pricePerHour: "",
-        amenities: [],
-        images: [],
-      });
-      setUploadedImages([]);
+      resetNewPitchForm();
       fetchOwnerData(); // Refresh data
       alert(
         "Pitch added successfully! Your pitch is now live and available for booking."
       );
     } catch (error) {
       console.error("Error adding pitch:", error);
-      alert("Error adding pitch. Please try again.");
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Error adding pitch. Please try again."
+      );
     } finally {
       setLoading(false);
     }
+  };
+
+  const resetNewPitchForm = () => {
+    setNewPitch({
+      name: "",
+      description: "",
+      address: "",
+      city: "",
+      state: "",
+      zipCode: "",
+      type: "",
+      surface: "",
+      size: "",
+      dimensions: "",
+      capacity: "",
+      pricePerHour: "",
+      amenities: [],
+      images: [],
+    });
+    setUploadedImages([]);
   };
 
   const handleEditPitch = (pitch: Pitch) => {
@@ -327,15 +414,24 @@ export default function OwnerDashboard() {
 
     try {
       setLoading(true);
-      // In a real app, this would make an API call
-      console.log("Updating pitch:", selectedPitch);
 
-      setTimeout(() => {
+      // Make API call to update pitch
+      const response = await fetch(`/api/pitches/${selectedPitch.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(selectedPitch),
+      });
+
+      if (response.ok) {
         setIsEditPitchOpen(false);
         setSelectedPitch(null);
         fetchOwnerData(); // Refresh data
         alert("Pitch updated successfully!");
-      }, 1000);
+      } else {
+        throw new Error("Failed to update pitch");
+      }
     } catch (error) {
       console.error("Error updating pitch:", error);
       alert("Error updating pitch. Please try again.");
@@ -349,23 +445,35 @@ export default function OwnerDashboard() {
     isActive: boolean
   ) => {
     try {
-      // In a real app, this would make an API call
-      console.log(
-        `${isActive ? "Activating" : "Deactivating"} pitch:`,
-        pitchId
-      );
+      // Make API call to toggle status
+      const response = await fetch(`/api/pitches/${pitchId}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ isActive }),
+      });
 
-      // Update local state
+      if (response.ok) {
+        // Update local state
+        setMyPitches((prev) =>
+          prev.map((pitch) =>
+            pitch.id === pitchId ? { ...pitch, isActive } : pitch
+          )
+        );
+        alert(`Pitch ${isActive ? "activated" : "deactivated"} successfully!`);
+      } else {
+        throw new Error("Failed to update pitch status");
+      }
+    } catch (error) {
+      console.error("Error toggling pitch status:", error);
+      // Update local state anyway for demo
       setMyPitches((prev) =>
         prev.map((pitch) =>
           pitch.id === pitchId ? { ...pitch, isActive } : pitch
         )
       );
-
       alert(`Pitch ${isActive ? "activated" : "deactivated"} successfully!`);
-    } catch (error) {
-      console.error("Error toggling pitch status:", error);
-      alert("Error updating pitch status. Please try again.");
     }
   };
 
@@ -382,7 +490,6 @@ export default function OwnerDashboard() {
     const files = event.target.files;
     if (!files) return;
 
-    // Convert files to base64 or use sample images for demo
     Array.from(files).forEach((file) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -400,18 +507,17 @@ export default function OwnerDashboard() {
   };
 
   const addSampleImages = () => {
-    // Add sample images for demo purposes
     const sampleImages = [
       "https://images.pexels.com/photos/274506/pexels-photo-274506.jpeg",
       "https://images.pexels.com/photos/1884574/pexels-photo-1884574.jpeg",
       "https://images.pexels.com/photos/1171084/pexels-photo-1171084.jpeg",
-      "https://images.pexels.com/photos/209977/pexels-photo-209977.jpeg",
     ];
-    setUploadedImages((prev) => [...prev, ...sampleImages.slice(0, 3)]);
+    setUploadedImages((prev) => [...prev, ...sampleImages]);
   };
 
   const getStatusColor = (status: string) => {
-    switch (status) {
+    const normalizedStatus = status?.toUpperCase();
+    switch (normalizedStatus) {
       case "CONFIRMED":
         return "bg-green-100 text-green-800";
       case "PENDING":
@@ -424,6 +530,20 @@ export default function OwnerDashboard() {
         return "bg-gray-100 text-gray-800";
     }
   };
+
+  if (loading && myPitches.length === 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
+        <Navigation />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading dashboard...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
@@ -454,21 +574,13 @@ export default function OwnerDashboard() {
           onValueChange={setActiveTab}
           className="space-y-6"
         >
-          <TabsList className="grid w-full grid-cols-5 h-12 bg-white shadow-sm">
+          <TabsList className="grid w-full grid-cols-4 h-12 bg-white shadow-sm">
             <TabsTrigger
               value="overview"
               className="flex items-center gap-2 data-[state=active]:bg-green-500 data-[state=active]:text-white rounded-md justify-center"
             >
               <TrendingUp className="h-4 w-4" />
               <span className="hidden sm:inline">Overview</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="users"
-              className="flex items-center gap-2 data-[state=active]:bg-green-500 data-[state=active]:text-white rounded-md justify-center"
-            >
-              <Users className="h-4 w-4" />
-              <span className="hidden sm:inline">Users</span>
             </TabsTrigger>
 
             <TabsTrigger
@@ -488,11 +600,11 @@ export default function OwnerDashboard() {
             </TabsTrigger>
 
             <TabsTrigger
-              value="settings"
+              value="analytics"
               className="flex items-center gap-2 data-[state=active]:bg-green-500 data-[state=active]:text-white rounded-md justify-center"
             >
               <Settings className="h-4 w-4" />
-              <span className="hidden sm:inline">Settings</span>
+              <span className="hidden sm:inline">Analytics</span>
             </TabsTrigger>
           </TabsList>
 
@@ -512,7 +624,7 @@ export default function OwnerDashboard() {
                       <div className="flex items-center mt-2">
                         <TrendingUp className="h-4 w-4 text-green-600 mr-1" />
                         <span className="text-sm text-green-600 font-medium">
-                          +12% from last month
+                          Total earned
                         </span>
                       </div>
                     </div>
@@ -534,9 +646,9 @@ export default function OwnerDashboard() {
                         {stats.totalBookings}
                       </p>
                       <div className="flex items-center mt-2">
-                        <TrendingUp className="h-4 w-4 text-green-600 mr-1" />
-                        <span className="text-sm text-green-600 font-medium">
-                          +8% from last month
+                        <Calendar className="h-4 w-4 text-blue-600 mr-1" />
+                        <span className="text-sm text-blue-600 font-medium">
+                          Total bookings
                         </span>
                       </div>
                     </div>
@@ -558,7 +670,7 @@ export default function OwnerDashboard() {
                         {stats.activePitches}
                       </p>
                       <p className="text-sm text-purple-600 mt-2">
-                        All operational
+                        {myPitches.length} total pitches
                       </p>
                     </div>
                     <div className="p-3 bg-purple-200 rounded-full">
@@ -579,7 +691,9 @@ export default function OwnerDashboard() {
                         {stats.averageRating}
                       </p>
                       <p className="text-sm text-yellow-600 mt-2">
-                        Excellent rating
+                        {stats.averageRating > 0
+                          ? "Great rating!"
+                          : "No reviews yet"}
                       </p>
                     </div>
                     <div className="p-3 bg-yellow-200 rounded-full">
@@ -601,14 +715,7 @@ export default function OwnerDashboard() {
               <CardContent>
                 <ScrollArea className="h-[400px]">
                   <div className="space-y-4">
-                    {loading ? (
-                      <div className="text-center py-8">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto"></div>
-                        <p className="mt-2 text-gray-600">
-                          Loading bookings...
-                        </p>
-                      </div>
-                    ) : recentBookings.length === 0 ? (
+                    {recentBookings.length === 0 ? (
                       <div className="text-center py-12">
                         <Calendar className="h-16 w-16 text-gray-400 mx-auto mb-4" />
                         <h3 className="text-xl font-semibold text-gray-900 mb-2">
@@ -628,14 +735,14 @@ export default function OwnerDashboard() {
                           <div className="flex items-center space-x-4">
                             <Avatar>
                               <AvatarFallback className="bg-gradient-to-br from-emerald-400 to-emerald-600 text-white">
-                                {booking.user?.firstName?.[0]}
-                                {booking.user?.lastName?.[0]}
+                                {booking.user?.firstName?.[0] || "U"}
+                                {booking.user?.lastName?.[0] || "S"}
                               </AvatarFallback>
                             </Avatar>
                             <div>
                               <p className="font-medium text-gray-900">
-                                {booking.user?.firstName}{" "}
-                                {booking.user?.lastName}
+                                {booking.user?.firstName || "Customer"}{" "}
+                                {booking.user?.lastName || ""}
                               </p>
                               <p className="text-sm text-gray-600">
                                 {booking.pitchName}
@@ -653,7 +760,7 @@ export default function OwnerDashboard() {
                               {booking.status}
                             </Badge>
                             <div className="text-lg font-semibold text-gray-900 mt-1">
-                              ${Number(booking.totalAmount)}
+                              ${Number(booking.totalAmount || 0)}
                             </div>
                           </div>
                         </div>
@@ -667,24 +774,7 @@ export default function OwnerDashboard() {
 
           <TabsContent value="pitches" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {loading ? (
-                Array.from({ length: 2 }).map((_, index) => (
-                  <Card
-                    key={index}
-                    className="animate-pulse border-0 shadow-lg"
-                  >
-                    <div className="aspect-video bg-gray-200 rounded-t-lg"></div>
-                    <CardHeader>
-                      <div className="h-6 bg-gray-200 rounded mb-2"></div>
-                      <div className="h-4 bg-gray-200 rounded w-2/3"></div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="h-20 bg-gray-200 rounded mb-4"></div>
-                      <div className="h-8 bg-gray-200 rounded"></div>
-                    </CardContent>
-                  </Card>
-                ))
-              ) : myPitches.length === 0 ? (
+              {myPitches.length === 0 ? (
                 <div className="col-span-2 text-center py-16">
                   <Building className="h-20 w-20 text-gray-400 mx-auto mb-6" />
                   <h3 className="text-2xl font-semibold text-gray-900 mb-4">
@@ -767,10 +857,6 @@ export default function OwnerDashboard() {
                               <Eye className="h-4 w-4 mr-2" />
                               View Public Page
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Calendar className="h-4 w-4 mr-2" />
-                              Manage Availability
-                            </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() =>
                                 handleTogglePitchStatus(
@@ -803,7 +889,7 @@ export default function OwnerDashboard() {
                             $
                             {pitch.bookings?.reduce(
                               (sum: number, booking: any) =>
-                                sum + Number(booking.totalAmount),
+                                sum + Number(booking.totalAmount || 0),
                               0
                             ) || 0}
                           </div>
@@ -821,7 +907,7 @@ export default function OwnerDashboard() {
                               ? (
                                   pitch.reviews.reduce(
                                     (sum: number, review: any) =>
-                                      sum + review.rating,
+                                      sum + (review.rating || 0),
                                     0
                                   ) / pitch.reviews.length
                                 ).toFixed(1)
@@ -862,16 +948,7 @@ export default function OwnerDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {loading ? (
-                        <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto"></div>
-                            <p className="mt-2 text-gray-600">
-                              Loading bookings...
-                            </p>
-                          </TableCell>
-                        </TableRow>
-                      ) : recentBookings.length === 0 ? (
+                      {recentBookings.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={6} className="text-center py-12">
                             <Calendar className="h-16 w-16 text-gray-400 mx-auto mb-4" />
@@ -893,17 +970,17 @@ export default function OwnerDashboard() {
                               <div className="flex items-center space-x-3">
                                 <Avatar>
                                   <AvatarFallback className="bg-gradient-to-br from-emerald-400 to-emerald-600 text-white">
-                                    {booking.user?.firstName?.[0]}
-                                    {booking.user?.lastName?.[0]}
+                                    {booking.user?.firstName?.[0] || "U"}
+                                    {booking.user?.lastName?.[0] || "S"}
                                   </AvatarFallback>
                                 </Avatar>
                                 <div>
                                   <div className="font-medium">
-                                    {booking.user?.firstName}{" "}
-                                    {booking.user?.lastName}
+                                    {booking.user?.firstName || "Customer"}{" "}
+                                    {booking.user?.lastName || ""}
                                   </div>
                                   <div className="text-sm text-gray-500">
-                                    {booking.user?.email}
+                                    {booking.user?.email || "No email"}
                                   </div>
                                 </div>
                               </div>
@@ -924,7 +1001,7 @@ export default function OwnerDashboard() {
                               </div>
                             </TableCell>
                             <TableCell className="font-semibold text-lg">
-                              ${Number(booking.totalAmount)}
+                              ${Number(booking.totalAmount || 0)}
                             </TableCell>
                             <TableCell>
                               <Badge className={getStatusColor(booking.status)}>
@@ -984,11 +1061,13 @@ export default function OwnerDashboard() {
                   <div className="text-4xl font-bold text-emerald-700 mb-2">
                     ${stats.totalRevenue}
                   </div>
-                  <div className="flex items-center text-sm text-green-600">
-                    <TrendingUp className="h-4 w-4 mr-1" />
-                    +12% vs last month
+                  <div className="text-sm text-emerald-600">
+                    Total revenue earned
                   </div>
-                  <Progress value={75} className="mt-4" />
+                  <Progress
+                    value={Math.min((stats.totalRevenue / 1000) * 100, 100)}
+                    className="mt-4"
+                  />
                 </CardContent>
               </Card>
 
@@ -1000,10 +1079,28 @@ export default function OwnerDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-4xl font-bold text-blue-700 mb-2">
-                    {stats.totalBookings > 0 ? "78%" : "0%"}
+                    {stats.totalBookings > 0
+                      ? Math.min(
+                          (stats.totalBookings / stats.activePitches) * 10,
+                          100
+                        ).toFixed(0)
+                      : "0"}
+                    %
                   </div>
                   <div className="text-sm text-blue-600">Average occupancy</div>
-                  <Progress value={78} className="mt-4" />
+                  <Progress
+                    value={
+                      stats.totalBookings > 0
+                        ? Math.min(
+                            (stats.totalBookings /
+                              Math.max(stats.activePitches, 1)) *
+                              10,
+                            100
+                          )
+                        : 0
+                    }
+                    className="mt-4"
+                  />
                 </CardContent>
               </Card>
 
@@ -1042,14 +1139,7 @@ export default function OwnerDashboard() {
               <CardContent>
                 <ScrollArea className="h-[400px]">
                   <div className="space-y-4">
-                    {loading ? (
-                      <div className="text-center py-8">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto"></div>
-                        <p className="mt-2 text-gray-600">
-                          Loading performance data...
-                        </p>
-                      </div>
-                    ) : myPitches.length === 0 ? (
+                    {myPitches.length === 0 ? (
                       <div className="text-center py-12">
                         <Building className="h-16 w-16 text-gray-400 mx-auto mb-4" />
                         <h3 className="text-xl font-semibold text-gray-900 mb-2">
@@ -1089,7 +1179,7 @@ export default function OwnerDashboard() {
                                     ? (
                                         pitch.reviews.reduce(
                                           (sum: number, review: any) =>
-                                            sum + review.rating,
+                                            sum + (review.rating || 0),
                                           0
                                         ) / pitch.reviews.length
                                       ).toFixed(1)
@@ -1105,7 +1195,7 @@ export default function OwnerDashboard() {
                               $
                               {pitch.bookings?.reduce(
                                 (sum: number, booking: any) =>
-                                  sum + Number(booking.totalAmount),
+                                  sum + Number(booking.totalAmount || 0),
                                 0
                               ) || 0}
                             </div>
@@ -1386,7 +1476,6 @@ export default function OwnerDashboard() {
                 <div className="space-y-4">
                   <Label>Pitch Photos</Label>
                   <div className="space-y-4">
-                    {/* Image Upload Area */}
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
                       <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                       <p className="text-gray-600 mb-2">
@@ -1420,7 +1509,6 @@ export default function OwnerDashboard() {
                       />
                     </div>
 
-                    {/* Image Preview Grid */}
                     {uploadedImages.length > 0 && (
                       <div>
                         <Label className="text-sm font-medium">

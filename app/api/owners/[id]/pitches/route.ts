@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(
   request: NextRequest,
@@ -15,7 +15,7 @@ export async function GET(
       include: {
         images: {
           orderBy: {
-            order: 'asc',
+            order: "asc",
           },
         },
         bookings: {
@@ -31,7 +31,7 @@ export async function GET(
             payment: true,
           },
           orderBy: {
-            createdAt: 'desc',
+            createdAt: "desc",
           },
         },
         reviews: {
@@ -53,15 +53,15 @@ export async function GET(
         },
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
     });
 
     return NextResponse.json(pitches);
   } catch (error) {
-    console.error('Error fetching owner pitches:', error);
+    console.error("Error fetching owner pitches:", error);
     return NextResponse.json(
-      { error: 'Failed to fetch pitches' },
+      { error: "Failed to fetch pitches" },
       { status: 500 }
     );
   }

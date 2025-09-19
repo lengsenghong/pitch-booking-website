@@ -1,3 +1,4 @@
+// app/api/pitches/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
@@ -9,7 +10,6 @@ export async function GET() {
           select: {
             firstName: true,
             lastName: true,
-            email: true,
           },
         },
         _count: {
@@ -37,27 +37,27 @@ export async function GET() {
       },
     });
 
-    // Calculate additional stats for each pitch
     const pitchesWithStats = pitches.map((pitch) => {
-      // Calculate average rating
       const averageRating =
         pitch.reviews.length > 0
-          ? pitch.reviews.reduce((sum, review) => sum + review.rating, 0) /
+          ? pitch.reviews.reduce((sum, r) => sum + r.rating, 0) /
             pitch.reviews.length
           : 0;
 
-      // Calculate total revenue
-      const totalRevenue = pitch.bookings.reduce((sum, booking) => {
-        return (
-          sum + (booking.payment?.amount ? Number(booking.payment.amount) : 0)
-        );
+      const totalRevenue = pitch.bookings.reduce((sum, b) => {
+        return sum + (b.payment?.amount ? Number(b.payment.amount) : 0);
       }, 0);
 
       return {
-        ...pitch,
+        id: pitch.id,
+        name: pitch.name,
+        address: pitch.address,
+        owner: pitch.owner,
         averageRating: Number(averageRating.toFixed(1)),
         totalRevenue,
         status: pitch.isVerified ? "verified" : "pending",
+        bookingsCount: pitch._count.bookings,
+        reviewsCount: pitch._count.reviews,
       };
     });
 

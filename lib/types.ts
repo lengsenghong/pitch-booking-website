@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma } from "@prisma/client";
 
 // User types
 export type UserWithBookings = Prisma.UserGetPayload<{
@@ -85,7 +85,7 @@ export type TeamWithMembers = Prisma.TeamGetPayload<{
 // Search and filter types
 export interface PitchFilters {
   location?: string;
-  type?: 'INDOOR' | 'OUTDOOR';
+  type?: "INDOOR" | "OUTDOOR";
   priceMin?: number;
   priceMax?: number;
   size?: string;
@@ -141,7 +141,7 @@ export interface OwnerDashboardStats {
 export interface NotificationData {
   title: string;
   message: string;
-  type: 'BOOKING' | 'PAYMENT' | 'REVIEW' | 'SYSTEM';
+  type: "BOOKING" | "PAYMENT" | "REVIEW" | "SYSTEM";
   userId: string;
 }
 
@@ -150,7 +150,7 @@ export interface PaymentIntent {
   amount: number;
   currency: string;
   bookingId: string;
-  method: 'CARD' | 'PAYPAL' | 'CASH';
+  method: "CARD" | "QR" | "CASH";
 }
 
 // Availability types
